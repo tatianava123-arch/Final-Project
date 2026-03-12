@@ -18,8 +18,12 @@ from utils import CommandCompleter, ask_yes_no
 console = Console()
 
 
+# =========================
+# Валідація
+# =========================
+
 def normalize_ua_phone(phone: str) -> str:
-    """Нормалізує український номер до формату +380XXXXXXXXX."""
+    """Приводить різні формати українських номерів до єдиного +380XXXXXXXXX."""
     cleaned = re.sub(r"[^0-9+]", "", phone.strip())
 
     if cleaned.startswith("+380"):
@@ -38,14 +42,20 @@ def normalize_ua_phone(phone: str) -> str:
 
 
 def validate_email(email: str) -> str:
-    """Перевіряє формат email."""
+    """Захищає від збереження некоректних email-адрес."""
     email = email.strip()
     if not re.fullmatch(r"^[\w\.-]+@[\w\.-]+\.\w+$", email):
         raise ValueError("Невалідний email")
     return email
 
 
+# =========================
+# Fields
+# =========================
+
 class Field:
+    """Спільна основа для всіх полів запису."""
+
     def __init__(self, value: str) -> None:
         self.value = value
 
@@ -54,36 +64,47 @@ class Field:
 
 
 class Name(Field):
+    """Зберігає ім'я контакту."""
     pass
 
 
 class Phone(Field):
+    """Гарантує що номер завжди зберігається у нормалізованому форматі."""
+
     def __init__(self, value: str) -> None:
         super().__init__(normalize_ua_phone(value))
 
 
 class Email(Field):
+    """Гарантує що email зберігається лише після перевірки формату."""
+
     def __init__(self, value: str) -> None:
         super().__init__(validate_email(value))
 
 
 class Address(Field):
+    """Зберігає довільну адресу контакту."""
     pass
 
 
 class Birthday(Field):
+    """Зберігає дату як рядок і як date-об'єкт для обчислень."""
+
     def __init__(self, value: str) -> None:
         try:
             self.date_value: date = datetime.strptime(
-                value.strip(), "%d.%m.%Y"
-            ).date()
+                value.strip(), "%d.%m.%Y").date()
         except ValueError:
             raise ValueError("Використовуйте формат DD.MM.YYYY")
         super().__init__(value.strip())
 
 
+# =========================
+# Record
+# =========================
+
 class Record:
-    """Запис контакту з унікальним id."""
+    """Представляє один контакт із uuid як ключем, щоб дозволити однакові імена."""
 
     def __init__(self, name: str) -> None:
         self.id: str = str(uuid.uuid4())
@@ -94,16 +115,19 @@ class Record:
         self.birthday: Optional[Birthday] = None
 
     def add_phone(self, phone: str) -> None:
+        """Уникає дублікатів перед додаванням нового номера."""
         new_phone = Phone(phone)
         if any(p.value == new_phone.value for p in self.phones):
             return
         self.phones.append(new_phone)
 
     def find_phone(self, phone: str) -> Optional[Phone]:
+        """Шукає за нормалізованим значенням, щоб формат вводу не мав значення."""
         normalized = normalize_ua_phone(phone)
         return next((p for p in self.phones if p.value == normalized), None)
 
     def remove_phone(self, phone: str) -> bool:
+        """Повертає False якщо номер не існує, щоб CLI міг повідомити користувача."""
         found = self.find_phone(phone)
         if found is None:
             return False
@@ -111,6 +135,7 @@ class Record:
         return True
 
     def edit_phone(self, old_phone: str, new_phone: str) -> bool:
+        """Замінює номер на місці, щоб зберегти порядок у списку."""
         found = self.find_phone(old_phone)
         if found is None:
             return False
@@ -118,16 +143,19 @@ class Record:
         return True
 
     def add_email(self, email: str) -> None:
+        """Перезаписує email, бо контакт може мати лише одну адресу."""
         self.email = Email(email)
 
     def add_address(self, address: str) -> None:
+        """Перезаписує адресу, бо контакт може мати лише одну."""
         self.address = Address(address.strip())
 
     def add_birthday(self, birthday: str) -> None:
+        """Перезаписує день народження після валідації формату."""
         self.birthday = Birthday(birthday)
 
     def matches(self, query: str) -> bool:
-        """Шукає збіг в імені, телефоні, email або адресі."""
+        """Дозволяє шукати контакт за будь-яким з його полів."""
         q = query.lower().strip()
         if q in self.name.value.lower():
             return True
@@ -138,34 +166,44 @@ class Record:
         return any(q in p.value for p in self.phones)
 
 
+# =========================
+# AddressBook
+# =========================
+
 class AddressBook(UserDict):
-    """Книга контактів з пошуком і збереженням по id."""
+    """Зберігає контакти за uuid, щоб підтримувати однакові імена."""
 
     def add_record(self, record: Record) -> None:
+        """Використовує id запису як ключ для унікальності."""
         self.data[record.id] = record
 
     def find_by_id(self, record_id: str) -> Optional[Record]:
+        """Потрібен для прямого доступу коли id вже відомий."""
         return self.data.get(record_id)
 
     def find(self, name: str) -> Optional[Record]:
+        """Повертає перший збіг — для випадків коли дублікати малоймовірні."""
         name = name.strip()
         return next((r for r in self.data.values() if r.name.value == name), None)
 
     def find_all_by_name(self, name: str) -> list[Record]:
+        """Потрібен для коректної обробки кількох контактів з однаковим іменем."""
         name = name.strip()
         return [r for r in self.data.values() if r.name.value == name]
 
     def delete(self, record_id: str) -> bool:
+        """Видаляє за id, а не за іменем, щоб не зачепити однофамільців."""
         if record_id not in self.data:
             return False
         del self.data[record_id]
         return True
 
     def search(self, query: str) -> list[Record]:
+        """Делегує перевірку збігу самому запису через matches()."""
         return [r for r in self.data.values() if r.matches(query)]
 
     def get_upcoming_birthdays(self, days: int = 7) -> list[dict]:
-        """Повертає контакти з днями народження у найближчі дні."""
+        """Переносить привітання з вихідних на понеділок і сортує за датою."""
         today = date.today()
         end_date = today + timedelta(days=days)
         result: list[dict] = []
@@ -192,25 +230,28 @@ class AddressBook(UserDict):
                 congrats += timedelta(days=1)
 
             if today <= congrats <= end_date:
-                result.append(
-                    {
-                        "name": record.name.value,
-                        "congratulation_date": congrats.strftime("%d.%m.%Y"),
-                    }
-                )
+                result.append({
+                    "name": record.name.value,
+                    "congratulation_date": congrats.strftime("%d.%m.%Y"),
+                })
 
-        result.sort(
-            key=lambda x: datetime.strptime(x["congratulation_date"], "%d.%m.%Y")
-        )
+        result.sort(key=lambda x: datetime.strptime(
+            x["congratulation_date"], "%d.%m.%Y"))
         return result
 
 
+# =========================
+# Save / Load
+# =========================
+
 def save_data(book: AddressBook) -> None:
+    """Зберігає стан книги між сесіями."""
     with open("contacts.pkl", "wb") as f:
         pickle.dump(book, f)
 
 
 def load_data() -> AddressBook:
+    """Відновлює збережений стан або створює порожню книгу при першому запуску."""
     try:
         with open("contacts.pkl", "rb") as f:
             return pickle.load(f)
@@ -218,8 +259,12 @@ def load_data() -> AddressBook:
         return AddressBook()
 
 
+# =========================
+# CLI helpers
+# =========================
+
 def _pick_record(book: AddressBook, name: str) -> Optional[Record]:
-    """Якщо є дублікати імені, пропонує вибрати контакт."""
+    """Дає користувачу вибрати конкретний запис коли є кілька з однаковим іменем."""
     matches = book.find_all_by_name(name)
 
     if not matches:
@@ -242,13 +287,17 @@ def _pick_record(book: AddressBook, name: str) -> Optional[Record]:
         print("Невірний вибір")
 
 
+# =========================
+# CLI
+# =========================
+
 def create_contact(book: AddressBook) -> None:
+    """Попереджає про дублікат імені, але дозволяє створити контакт."""
     name = input("Ім'я: ").strip()
     if not name:
         print("Ім'я не може бути порожнім")
         return
 
-    # Не забороняємо дублікати, але попереджаємо користувача.
     existing = book.find_all_by_name(name)
     if existing:
         print(f"Увага: контакт '{name}' вже існує ({len(existing)} шт.)")
@@ -283,6 +332,7 @@ def create_contact(book: AddressBook) -> None:
 
 
 def edit_contact(book: AddressBook, name: str = "") -> None:
+    """Обирає потрібний запис через _pick_record якщо є однофамільці."""
     if not name:
         name = input("Ім'я контакту: ").strip()
 
@@ -332,6 +382,7 @@ def edit_contact(book: AddressBook, name: str = "") -> None:
 
 
 def delete_contact(book: AddressBook, name: str = "") -> None:
+    """Видаляє за id запису, щоб не зачепити однофамільців."""
     if not name:
         name = input("Ім'я контакту: ").strip()
 
@@ -346,6 +397,7 @@ def delete_contact(book: AddressBook, name: str = "") -> None:
 
 
 def show_contacts(book: AddressBook) -> None:
+    """Виводить таблицю для швидкого огляду всіх контактів."""
     if not book.data:
         print("Немає контактів")
         return
@@ -368,6 +420,7 @@ def show_contacts(book: AddressBook) -> None:
 
 
 def show_upcoming_birthdays(book: AddressBook, days_range: int = 30) -> None:
+    """Нагадує про дні народження заздалегідь, щоб не пропустити."""
     upcoming = book.get_upcoming_birthdays(days_range)
 
     if not upcoming:
@@ -375,8 +428,7 @@ def show_upcoming_birthdays(book: AddressBook, days_range: int = 30) -> None:
         return
 
     table = Table(
-        title=f"Дні народження (наступні {days_range} днів)", box=box.ROUNDED
-    )
+        title=f"Дні народження (наступні {days_range} днів)", box=box.ROUNDED)
     table.add_column("Ім'я")
     table.add_column("Дата привітання")
 
@@ -387,6 +439,7 @@ def show_upcoming_birthdays(book: AddressBook, days_range: int = 30) -> None:
 
 
 def show_birthday(book: AddressBook, name: str) -> None:
+    """Показує скільки днів залишилось до наступного дня народження контакту."""
     record = _pick_record(book, name)
     if not record:
         return
@@ -408,37 +461,25 @@ def show_birthday(book: AddressBook, name: str) -> None:
             next_bd = date(today.year + 1, 2, 28)
 
     days_left = (next_bd - today).days
-    print(f"День народження {name}: {record.birthday.value} (через {days_left} днів)")
+    print(
+        f"День народження {name}: {record.birthday.value} (через {days_left} днів)")
 
 
 def run(book: AddressBook) -> None:
-    commands = [
-        "add",
-        "edit",
-        "delete",
-        "all",
-        "search",
-        "birthdays",
-        "show-birthday",
-        "help",
-        "back",
-    ]
+    """Запускає інтерактивний цикл адресної книги."""
+    commands = ["add", "edit", "delete", "all", "search",
+                "birthdays", "show-birthday", "help", "back"]
     session = PromptSession()
-    completer = CommandCompleter(
-        commands,
-        {
-            "names": lambda: list({r.name.value for r in book.data.values()}),
-        },
-    )
+    completer = CommandCompleter(commands, {
+        "names": lambda: list({r.name.value for r in book.data.values()}),
+    })
 
     console.print(
-        "\n[cyan]📒 Адресна книга[/cyan] — введіть [bold]help[/bold] для списку команд\n"
-    )
+        "\n[cyan]📒 Адресна книга[/cyan] — введіть [bold]help[/bold] для списку команд, або [bold]back[/bold] для повернення до головного меню\n")
 
     while True:
         user_input = session.prompt(
-            "Адресна книга › ", completer=completer
-        ).strip()
+            "Адресна книга › ", completer=completer).strip()
         cmd = user_input.lower()
 
         if cmd == "back":
@@ -452,7 +493,8 @@ def run(book: AddressBook) -> None:
             table.add_row("edit [ім'я]", "Редагувати контакт")
             table.add_row("delete [ім'я]", "Видалити контакт")
             table.add_row("all", "Показати всі контакти")
-            table.add_row("search [запит]", "Пошук за іменем, телефоном, email")
+            table.add_row("search [запит]",
+                          "Пошук за іменем, телефоном, email")
             table.add_row("birthdays", "Найближчі дні народження")
             table.add_row("show-birthday [ім'я]", "День народження контакту")
             table.add_row("help", "Список команд")

@@ -1,16 +1,17 @@
-from setuptools import setup, find_packages
+from setuptools import setup
 
 setup(
-    name="personal-assistant-snakecharmers",  # Назва вашого пакету
+    name="personal-assistant-snakecharmers",
     version="0.1.0",
-    packages=find_packages(),
+    # Вказуємо окремі файли, бо вони лежать у корені, а не в папці
+    py_modules=["cli", "contacts", "notebook", "utils"], 
     install_requires=[
         "prompt_toolkit==3.0.52",
         "rich==14.3.3",
     ],
     entry_points={
         'console_scripts': [
-            'helper-bot=cli:main',  # Тепер після інсталяції команда 'helper-bot' запустить програму
+            'helper-bot=cli:main',
         ],
     },
     author="SnakeCharmers Team",

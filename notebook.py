@@ -155,7 +155,7 @@ def load_data() -> Notebook:
 
 
 # =========================
-# CLI 
+# CLI
 # =========================
 
 
@@ -235,17 +235,16 @@ def run(book: Notebook) -> None:
     """Запускає інтерактивний цикл нотатника."""
     commands = ["add", "edit", "delete", "all", "search", "sort", "help", "back"]
     session = PromptSession()
-    
+
     # Винесено в окрему змінну для кращої читабельності PEP 8
-    tags_getter = lambda: list(
-        {tag for n in book.data.values() for tag in n.tags.value}
-    )
-    
+    def get_tags():
+        return list({tag for n in book.data.values() for tag in n.tags.value})
+
     completer = CommandCompleter(
         commands,
         {
             "titles": lambda: list(book.data.keys()),
-            "tags": tags_getter,
+            "tags": lambda: list({tag for n in book.data.values() for tag in n.tags.value}),
         },
     )
 

@@ -475,7 +475,10 @@ def run(book: AddressBook) -> None:
     })
 
     console.print(
-        "\n[cyan]📒 Адресна книга[/cyan] — введіть [bold]help[/bold] для списку команд, або [bold]back[/bold] для повернення до головного меню\n")
+        "\n[cyan]📒 Адресна книга[/cyan] — введіть [bold]help[/bold] "
+        "для списку команд, або [bold]back[/bold] для повернення "
+        "до головного меню\n"
+    )
 
     while True:
         user_input = session.prompt(

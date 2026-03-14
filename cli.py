@@ -18,11 +18,17 @@ def show_menu() -> None:
     text.append("3", style="bold cyan")
     text.append("  👋 Вийти")
     console.print(Panel(
-        text, title="[bold green]Персональний асистент[/bold green]", padding=(1, 4)))
+        text,
+        title="[bold green]Персональний асистент[/bold green]",
+        padding=(1, 4)
+    ))
 
 
 def main() -> None:
-    """Завантажує дані, показує головне меню і направляє до потрібного модуля. Зберігає дані при виході."""
+    """
+    Завантажує дані, показує головне меню і направляє до потрібного модуля.
+    Зберігає дані при виході.
+    """
     address_book = ab.load_data()
     notebook = nb.load_data()
 
